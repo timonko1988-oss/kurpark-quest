@@ -1,6 +1,6 @@
 // Alle veränderbaren Werte des Spiels. Die Spiellogik steht in game.js.
 const CONFIG = {
-  version: "4",                           // bei jeder neuen Version erhöhen (auch in index.html), dann lädt der Browser alles frisch
+  version: "5",                           // bei jeder neuen Version erhöhen (auch in index.html), dann lädt der Browser alles frisch
   view: { width: 640, height: 360 },      // sichtbarer Kartenausschnitt in Kartenpixeln
 
   round: {
@@ -34,9 +34,9 @@ const CONFIG = {
 
   // Trampelquelle am Brunnenmädchen
   spring: {
-    x: 794, y: 378, radius: 58,           // in diesem Umkreis kann getrunken werden
+    x: 793, y: 371, radius: 88,           // in diesem Umkreis kann getrunken werden
     refillPerSecond: 50,                  // Leertaste halten: 0 auf 100 in 2 Sekunden
-    marker: { x: 794, y: 292 },           // hier schwebt der Wassertropfen
+    marker: { x: 793, y: 282 },           // hier schwebt der Wassertropfen
   },
 
   items: {
@@ -97,16 +97,43 @@ const CONFIG = {
     fallSpeed: 38,
   },
 
-  // Platzhalter-Töne: Folgen aus [Frequenz in Hz, Dauer in Sekunden, Wellenform]
+  // Namensschilder: erscheinen kurz, wenn die Figur den Umkreis betritt
+  places: {
+    signTime: 2.8,                        // Sekunden
+    list: [
+      { name: "Schloss Bad Pyrmont", x: 480, y: 700, radius: 150 },
+      { name: "Brunnenmädchen",      x: 793, y: 371, radius: 100 },
+    ],
+  },
+
+  touch: { radius: 44, deadZone: 10 },    // Joystick: Auslenkung und toter Bereich in Bildschirmpixeln
+
+  // Töne: Folgen aus [Frequenz in Hz (0 = Pause), Dauer in Sekunden, Wellenform, Endfrequenz (optional, Ton gleitet dorthin)]
   sound: {
     volume: 0.12,
     sounds: {
-      start:   [[523, 0.08, "square"], [659, 0.08, "square"], [784, 0.16, "square"]],
-      collect: [[880, 0.06, "square"], [1320, 0.12, "square"]],
-      honk:    [[330, 0.09, "sawtooth"], [247, 0.16, "sawtooth"]],
-      drink:   [[520, 0.05, "sine"], [700, 0.07, "sine"]],
+      start:   [[523, 0.08, "square"], [659, 0.08, "square"], [784, 0.08, "square"], [1047, 0.2, "square"]],
+      collect: [[880, 0.05, "square"], [1175, 0.05, "square"], [1760, 0.12, "square"]],
+      honk:    [[620, 0.12, "sawtooth", 300], [0, 0.04], [700, 0.1, "sawtooth", 340], [0, 0.03], [560, 0.2, "sawtooth", 230]],   // empörtes Schnattern
+      drink:   [[260, 0.07, "sine", 520], [0, 0.03], [300, 0.07, "sine", 600]],                                                  // gluck, gluck
+      ahh:     [[740, 0.38, "triangle", 370]],                                                                                   // zufriedenes „Ahh“
+      tired:   [[311, 0.26, "sawtooth", 294], [294, 0.26, "sawtooth", 277], [277, 0.26, "sawtooth", 262], [262, 0.6, "sawtooth", 196]],   // traurige Posaune
+      sign:    [[1319, 0.07, "triangle"], [1760, 0.16, "triangle"]],
       tick:    [[990, 0.06, "square"]],
-      end:     [[659, 0.14, "square"], [523, 0.14, "square"], [392, 0.32, "square"]],
+      end:     [[784, 0.12, "square"], [659, 0.12, "square"], [523, 0.12, "square"], [392, 0.12, "square"], [523, 0.36, "square"]],
     },
+  },
+
+  music: {
+    file: "",                             // z. B. "assets/musik.mp3"; leer = eingebaute Chiptune-Melodie
+    volume: 0.07,
+    tiredRate: 0.62,                      // Tempo bei Energie 0 (die Musik leiert)
+    tiredPitch: 0.84,                     // dabei klingt die eingebaute Melodie so viel tiefer
+    hurryRate: 1.3,                       // Tempo in den letzten Sekunden
+    bpm: 132,
+    // Eingebaute Melodie als MIDI-Noten in Achteln (0 = Pause); Bass: eine Note pro Viertel
+    melody: [76, 79, 76, 72,  74, 77, 74, 71,  72, 76, 79, 76,  72, 0, 67, 0,
+             69, 72, 69, 65,  67, 71, 74, 71,  72, 67, 64, 67,  72, 0, 0, 0],
+    bass:   [48, 55, 43, 50,  48, 52, 48, 43,  41, 45, 43, 47,  48, 43, 48, 0],
   },
 };

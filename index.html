@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Kurpark-Spiel Bad Pyrmont</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
 <style>
@@ -10,7 +10,7 @@
      Bewusst nur ein Erscheinungsbild (Parkgrün bei Nacht). */
   :root { --bg: #14291b; --frame: #0a1710; --text: #dcebd2; --key: #f3d77a;
           --panel: #14203ae6; --panel-edge: #f4f1e4; --hud-text: #ffffff; --hud-label: #b9c7e6;
-          --energy: #6fdc5a; --warn: #ff6b5e; --veil: #0c1a12b3; --button-text: #2a2208;
+          --energy: #6fdc5a; --warn: #ff6b5e; --veil: #0c1a12b3; --button-text: #2a2208; --stick: #ffffff33;
           --pixel-font: "Press Start 2P", ui-monospace, "Courier New", monospace;
           --text-font: system-ui, "Segoe UI", sans-serif; color-scheme: dark; }
   html, body { height: 100%; }
@@ -19,7 +19,7 @@
          font: 14px/1.4 var(--text-font);
          display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
   /* --s = Vergrößerung des Spielfelds; alle Maße der Anzeige und der Bildschirme hängen daran */
-  #stage { position: relative; --s: 1; max-width: 100%; }
+  #stage { position: relative; --s: 1; max-width: 100%; touch-action: none; user-select: none; -webkit-user-select: none; }
   #game { display: block; max-width: 100%; outline: 3px solid var(--frame); }
 
   #hud { position: absolute; inset: 0 0 auto 0; display: flex; justify-content: space-between; align-items: flex-start;
@@ -51,14 +51,28 @@
   .icon { width: calc(14px * var(--s)); height: calc(14px * var(--s)); image-rendering: pixelated;
           background-repeat: no-repeat; background-size: auto 100%; background-position: calc(-14px * var(--s) * var(--i)) 0; }
   .icon:not(:first-child) { margin-left: calc(6px * var(--s)); }
-  button { margin-top: calc(3px * var(--s)); padding: calc(8px * var(--s)) calc(14px * var(--s)); cursor: pointer;
-           font: calc(9px * var(--s))/1 var(--pixel-font); color: var(--button-text); background: var(--key);
+  button { cursor: pointer; font: calc(9px * var(--s))/1 var(--pixel-font); color: var(--button-text); background: var(--key);
            border: calc(2px * var(--s)) solid var(--panel-edge); border-radius: calc(2px * var(--s)); }
+  .card button { margin-top: calc(3px * var(--s)); padding: calc(8px * var(--s)) calc(14px * var(--s)); }
   button:hover { filter: brightness(1.1); }
   button:focus-visible { outline: calc(2px * var(--s)) solid var(--hud-text); outline-offset: calc(2px * var(--s)); }
   button:disabled { opacity: 0.5; cursor: default; }
 
+  /* Touch: Joystick, Trinken-Knopf, Texte je nach Eingabegerät */
+  #stick { position: absolute; width: 104px; height: 104px; margin: -52px 0 0 -52px; box-sizing: border-box; pointer-events: none;
+           border: 2px solid var(--panel-edge); border-radius: 50%; background: var(--stick); }
+  #knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%;
+          background: var(--key); border: 2px solid var(--panel-edge); box-sizing: border-box; }
+  #drink { position: absolute; right: 18px; bottom: 18px; width: 92px; height: 92px; border-radius: 50%; font-size: 9px; touch-action: none; }
+  .only-touch { display: none; }
+  body.touch .only-touch { display: revert; }
+  body.touch .only-keys { display: none; }
+  #rotate { display: none; position: fixed; inset: 0; z-index: 5; align-items: center; justify-content: center; padding: 16px;
+            background: var(--bg); color: var(--key); font: 12px/1.8 var(--pixel-font); text-align: center; }
+  @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+
   #hint { height: 36px; line-height: 36px; margin: 0; text-align: center; white-space: nowrap; overflow: hidden; max-width: 100%; }
+  body.touch #hint { display: none; }
   kbd { font: inherit; font-weight: 600; color: var(--key); }
   @media (prefers-reduced-motion: reduce) { #time.warn { animation: none; } }
 </style>
@@ -71,14 +85,18 @@
       <div class="panel"><span class="label">PUNKTE</span><span id="score">0000</span></div>
       <div class="panel"><span class="label">ENERGIE</span><span id="energy"><i id="energy-fill"></i></span></div>
     </div>
+    <div id="stick" hidden><div id="knob"></div></div>
+    <button id="drink" type="button" hidden>Trinken</button>
     <div id="start" class="overlay">
       <div class="card">
         <h1>Kurpark-Quest</h1>
         <p class="sub">BAD PYRMONT</p>
         <p>Sammle in <span id="duration">2:30</span> Minuten möglichst viele Schätze im Kurpark. Das Walken macht müde: An der Trampelquelle beim Brunnenmädchen tankst du neue Energie. Den Wildgänsen lässt du besser den Vortritt, jede Begegnung kostet etwas Puste.</p>
         <ul class="keys">
-          <li><kbd>Pfeiltasten</kbd> laufen</li>
-          <li><kbd>Leertaste</kbd> halten: an der Trampelquelle trinken</li>
+          <li class="only-keys"><kbd>Pfeiltasten</kbd> laufen</li>
+          <li class="only-keys"><kbd>Leertaste</kbd> halten: an der Trampelquelle trinken</li>
+          <li class="only-touch"><kbd>Finger auflegen und ziehen</kbd> laufen</li>
+          <li class="only-touch"><kbd>Trinken</kbd> gedrückt halten: an der Trampelquelle trinken</li>
         </ul>
         <div id="legend" class="legend"></div>
         <button id="play" type="button" disabled>Spielen</button>
@@ -93,8 +111,9 @@
     </div>
   </div>
   <p id="hint"><kbd>Pfeiltasten</kbd> laufen · <kbd>Leertaste</kbd> trinken · <kbd>M</kbd> Ton aus/an · <kbd>L</kbd> Laufflächen</p>
-  <script src="config.js?v=4"></script>
-  <script src="mapdata.js?v=4"></script>
-  <script src="game.js?v=4"></script>
+  <div id="rotate">Bitte Handy drehen</div>
+  <script src="config.js?v=5"></script>
+  <script src="mapdata.js?v=5"></script>
+  <script src="game.js?v=5"></script>
 </body>
 </html>

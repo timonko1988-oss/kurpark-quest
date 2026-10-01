@@ -58,6 +58,9 @@
       popups: [],         // aufsteigende Texte wie „+100“: { x, y, text, color, age }
       geese: C.geese.starts.map(makeGoose),
       spawnTimer: 0,
+      place: null,        // Ort, in dem die Figur gerade steht
+      sign: null,         // eingeblendetes Namensschild: { text, age }
+      wasEmpty: false, wasFull: true,
     });
     updateCamera();
     for (let n = 0; n < C.items.startCount; n++) spawnItem();
@@ -77,28 +80,109 @@
   addEventListener("keyup", e => { keys[e.key] = false; });
   addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 
+  // Touch: Joystick erscheint dort, wo der Finger aufsetzt; Trinken-Knopf unten rechts
+  const stage = $("stage"), stickEl = $("stick"), knobEl = $("knob");
+  const stick = { id: null, x: 0, y: 0, dx: 0, dy: 0 };
+  const coarse = matchMedia("(pointer: coarse)");
+  const portrait = matchMedia("(orientation: portrait) and (pointer: coarse)");
+  if (coarse.matches) document.body.classList.add("touch");
+  stage.addEventListener("pointerdown", e => {
+    if (e.pointerType === "mouse" || e.target.closest("button")) return;
+    document.body.classList.add("touch");
+    if (state.mode !== "play" || stick.id !== null) return;
+    const box = stage.getBoundingClientRect();
+    Object.assign(stick, { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, dy: 0 });
+    stickEl.style.left = e.clientX - box.left + "px"; stickEl.style.top = e.clientY - box.top + "px";
+    knobEl.style.transform = "";
+    stickEl.hidden = false;
+  });
+  stage.addEventListener("pointermove", e => {
+    if (e.pointerId !== stick.id) return;
+    const T = C.touch, vx = e.clientX - stick.x, vy = e.clientY - stick.y, len = Math.hypot(vx, vy);
+    const k = Math.min(1, T.radius / (len || 1));
+    knobEl.style.transform = `translate(${vx * k}px, ${vy * k}px)`;
+    // auf acht Richtungen einrasten, damit sich Touch wie die Pfeiltasten verhält
+    const a = Math.round(Math.atan2(vy, vx) / (Math.PI / 4)) * (Math.PI / 4);
+    stick.dx = len < T.deadZone ? 0 : Math.round(Math.cos(a));
+    stick.dy = len < T.deadZone ? 0 : Math.round(Math.sin(a));
+  });
+  const releaseStick = e => { if (e.pointerId === stick.id) { stick.id = null; stick.dx = stick.dy = 0; stickEl.hidden = true; } };
+  stage.addEventListener("pointerup", releaseStick);
+  stage.addEventListener("pointercancel", releaseStick);
+  const drinkBtn = $("drink");
+  drinkBtn.addEventListener("pointerdown", e => { e.preventDefault(); drinkBtn.setPointerCapture(e.pointerId); keys[" "] = true; });
+  for (const type of ["pointerup", "pointercancel"]) drinkBtn.addEventListener(type, () => { keys[" "] = false; });
+
   // ---------- Sound (einfache Platzhalter-Töne) ----------
   let audio = null;
-  function playSound(name) {
+  // Ein Ton: Frequenz gleitet von freq nach freqEnd (für Schnattern, Seufzen, Posaune)
+  function tone(freq, start, len, wave, volume, freqEnd = freq) {
+    const osc = audio.createOscillator(), gain = audio.createGain();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(freq, start);
+    osc.frequency.exponentialRampToValueAtTime(freqEnd, start + len);
+    gain.gain.setValueAtTime(volume, start);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + len);
+    osc.connect(gain).connect(audio.destination);
+    osc.start(start); osc.stop(start + len);
+  }
+  // pitch verschiebt den ganzen Effekt (z. B. höher für wertvollere Schätze)
+  function playSound(name, pitch = 1) {
     const notes = C.sound.sounds[name];
     if (!audio || state.muted || !notes) return;
     let t = audio.currentTime;
-    for (const [freq, len, wave] of notes) {
-      const osc = audio.createOscillator(), gain = audio.createGain();
-      osc.type = wave; osc.frequency.value = freq;
-      gain.gain.setValueAtTime(C.sound.volume, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + len);
-      osc.connect(gain).connect(audio.destination);
-      osc.start(t); osc.stop(t + len);
+    for (const [freq, len, wave, freqEnd] of notes) {
+      if (freq) tone(freq * pitch, t, len, wave, C.sound.volume, (freqEnd || freq) * pitch);
       t += len;
     }
+  }
+
+  // ---------- Musik ----------
+  // Tempo hängt am Spielgeschehen: erschöpft leiert sie, kurz vor Schluss wird sie hektisch
+  const M = C.music, music = { el: null, timer: null, step: 0, next: 0 };
+  const midi = n => 440 * 2 ** ((n - 69) / 12);
+  function musicRate() {
+    if (state.mode !== "play") return 1;
+    if (state.energy <= 0) return M.tiredRate;
+    return state.time <= C.round.warnAt ? M.hurryRate : 1;
+  }
+  function stopMusic() {
+    if (music.el) music.el.pause();
+    clearInterval(music.timer); music.timer = null;
+  }
+  function startMusic() {
+    stopMusic();
+    if (M.file) {                                    // Musikdatei: wird langsamer und tiefer bzw. schneller abgespielt
+      music.el = music.el || Object.assign(new Audio(M.file + "?v=" + C.version), { loop: true, preservesPitch: false });
+      music.el.currentTime = 0; music.el.volume = M.volume;
+      music.el.play().catch(() => {});
+    } else if (audio) {                              // sonst die eingebaute Chiptune-Melodie
+      music.step = 0; music.next = audio.currentTime + 0.15;
+      music.timer = setInterval(scheduleMusic, 50);
+    }
+  }
+  function scheduleMusic() {
+    while (music.next < audio.currentTime + 0.2) {
+      const rate = musicRate(), len = 30 / M.bpm / rate, pitch = rate < 1 ? M.tiredPitch : 1;
+      const i = music.step++ % M.melody.length;
+      if (!state.muted) {
+        if (M.melody[i]) tone(midi(M.melody[i]) * pitch, music.next, len * 0.9, "square", M.volume * 0.5);
+        if (i % 2 === 0 && M.bass[i / 2]) tone(midi(M.bass[i / 2]) * pitch, music.next, len * 1.6, "triangle", M.volume);
+      }
+      music.next += len;
+    }
+  }
+  function updateMusic() {
+    if (!music.el) return;
+    music.el.muted = state.muted;
+    music.el.playbackRate = musicRate();
   }
 
   // ---------- Spielfigur ----------
   function updatePlayer(dt) {
     const p = state.player, P = C.player;
-    let dx = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
-    let dy = (keys.ArrowDown ? 1 : 0) - (keys.ArrowUp ? 1 : 0);
+    let dx = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0) || stick.dx;
+    let dy = (keys.ArrowDown ? 1 : 0) - (keys.ArrowUp ? 1 : 0) || stick.dy;
     if (state.drinking) dx = dy = 0;                           // beim Trinken bleibt die Figur stehen
     p.moving = dx !== 0 || dy !== 0;
     if (!p.moving) { p.walkTime = 0; return; }
@@ -108,15 +192,15 @@
     const d = P.speed * tired * dt / Math.hypot(dx, dy);       // diagonal nicht schneller
     const free = (x, y) => canStand(x, y, P.hitbox, WALKABLE);
     const step = (ax, ay) => free(p.x + ax, p.y + ay) && (p.x += ax, p.y += ay, true);
-    // Achsen getrennt prüfen; an Ecken und schrägen Kanten weicht die Figur selbst aus
-    if (dx && !step(dx * d, 0) && !dy) {
-      if (free(p.x + dx * d, p.y - P.slide)) step(0, -d);
-      else if (free(p.x + dx * d, p.y + P.slide)) step(0, d);
-    }
-    if (dy && !step(0, dy * d) && !dx) {
-      if (free(p.x - P.slide, p.y + dy * d)) step(-d, 0);
-      else if (free(p.x + P.slide, p.y + dy * d)) step(d, 0);
-    }
+    // Achsen getrennt prüfen; an Ecken, schrägen Kanten und in engen Durchgängen weicht die Figur selbst seitlich aus
+    const nudge = (mx, my) => {
+      for (const s of [2, 4, P.slide]) for (const side of [-1, 1]) {
+        const ox = my ? side * s : 0, oy = mx ? side * s : 0;
+        if (free(p.x + mx + ox, p.y + my + oy)) return step(Math.sign(ox) * d, Math.sign(oy) * d);
+      }
+    };
+    if (dx && !step(dx * d, 0) && !dy) nudge(dx * d, 0);
+    if (dy && !step(0, dy * d) && !dx) nudge(0, dy * d);
     p.walkTime += dt * tired;
   }
 
@@ -140,6 +224,18 @@
       state.energy = Math.max(0, state.energy - E.drainPerSecond * dt);
       drinkSoundTimer = 0;
     }
+    const empty = state.energy <= 0, full = state.energy >= E.max;
+    if (empty && !state.wasEmpty) playSound("tired");
+    if (full && !state.wasFull) playSound("ahh");
+    state.wasEmpty = empty; state.wasFull = full;
+  }
+
+  // ---------- Orte: Namensschild beim Betreten ----------
+  function updatePlaces(dt) {
+    const place = C.places.list.find(p => dist(state.player, p) < p.radius) || null;
+    if (place && place.name !== state.place) { state.sign = { text: place.name, age: 0 }; playSound("sign"); }
+    state.place = place && place.name;
+    if (state.sign && (state.sign.age += dt) > C.places.signTime) state.sign = null;
   }
 
   // ---------- Schätze ----------
@@ -175,7 +271,7 @@
       if (dist(it, p) < I.pickupRadius) {
         state.score += it.type.points;
         addPopup(it.x, it.y - 56, "+" + it.type.points, it.type.color);
-        playSound("collect");
+        playSound("collect", 0.8 + I.types.indexOf(it.type) * 0.2);
         return false;
       }
       return it.age < it.life;
@@ -434,11 +530,25 @@
     ctx.globalAlpha = 1;
   }
 
+  // Namensschild oben in der Mitte, blendet am Anfang und Ende weich
+  function drawSign() {
+    const sg = state.sign;
+    if (!sg) return;
+    ctx.font = `10px ${PIXEL_FONT}`;
+    const w = Math.ceil(ctx.measureText(sg.text).width) + 20, x = Math.round((VW - w) / 2), y = 40;
+    ctx.globalAlpha = Math.min(1, sg.age * 5, (C.places.signTime - sg.age) * 3);
+    ctx.fillStyle = "#f4f1e4"; ctx.fillRect(x - 1, y - 1, w + 2, 24);
+    ctx.fillStyle = "#14203a"; ctx.fillRect(x, y, w, 22);
+    ctx.textAlign = "center"; ctx.fillStyle = "#f3d77a"; ctx.fillText(sg.text, VW / 2, y + 16);
+    ctx.globalAlpha = 1;
+  }
+
   // Hinweiszeile unten im Spielfeld
+  const isTouch = () => document.body.classList.contains("touch");
   function drawPrompt() {
     let text = "";
     if (state.drinking) text = "GLUCK, GLUCK ...";
-    else if (atSpring() && state.energy < C.energy.max - 5) text = "LEERTASTE HALTEN: TRINKEN";
+    else if (atSpring() && state.energy < C.energy.max - 5) text = isTouch() ? "TRINKEN GEDRÜCKT HALTEN" : "LEERTASTE HALTEN: TRINKEN";
     else if (state.energy <= 0) text = "ERSCHÖPFT! AB ZUR TRAMPELQUELLE";
     if (text) drawText(text, VW / 2, VH - 14, "#ffffff");
   }
@@ -468,7 +578,7 @@
       }
     }
     drawSpringMarker();
-    if (state.mode === "play") { state.geese.forEach(drawHonk); drawPopups(); drawPrompt(); }
+    if (state.mode === "play") { state.geese.forEach(drawHonk); drawPopups(); drawSign(); drawPrompt(); }
     updateHud();
   }
 
@@ -484,6 +594,7 @@
     if (hudCache.energy !== pct) { hudCache.energy = pct; $("energy-fill").style.width = pct + "%"; }
     $("time").classList.toggle("warn", state.mode === "play" && secs <= C.round.warnAt);
     $("energy").classList.toggle("warn", state.energy < C.energy.lowAt);
+    drinkBtn.hidden = !(state.mode === "play" && isTouch() && atSpring());
   }
 
   let menuReadyAt = 0;                       // kurz warten, bevor Enter den Endbildschirm wegdrückt
@@ -496,6 +607,7 @@
     $("hud").hidden = false;
     lastTick = 0;
     playSound("start");
+    startMusic();
   }
   function endRound() {
     state.mode = "end";
@@ -503,6 +615,8 @@
     menuReadyAt = state.clock + 0.8;
     $("final").textContent = state.score.toLocaleString("de-DE");
     $("end").hidden = false;
+    stickEl.hidden = true; stick.id = null; stick.dx = stick.dy = 0; keys[" "] = false;
+    stopMusic();
     playSound("end");
   }
   $("play").addEventListener("click", startRound);
@@ -524,12 +638,14 @@
   function update(dt) {
     state.clock += dt;
     updateFountains(dt);
-    if (state.mode !== "play") return;
+    updateMusic();
+    if (state.mode !== "play" || portrait.matches) return;   // im Hochformat pausiert das Spiel („Bitte Handy drehen“)
     updateEnergy(dt);
     updatePlayer(dt);
     updateCamera();
     updateItems(dt);
     updateGeese(dt);
+    updatePlaces(dt);
     state.time -= dt;
     const secs = Math.ceil(state.time);
     if (secs <= C.round.warnAt && secs !== lastTick && secs > 0) { lastTick = secs; playSound("tick"); }
@@ -538,7 +654,7 @@
 
   // Canvas in ganzzahliger Vergrößerung zeichnen und per CSS ins Fenster einpassen: scharfe Pixel bei jeder Fenstergröße
   function resize() {
-    const fit = Math.min((innerWidth - 32) / VW, (innerHeight - 36) / VH);   // 32 = Seitenrand, 36 = Hinweiszeile
+    const fit = Math.min((innerWidth - 32) / VW, (innerHeight - $("hint").offsetHeight) / VH);   // 32 = Seitenrand, darunter die Hinweiszeile
     const k = Math.max(1, Math.ceil(fit));
     canvas.width = VW * k; canvas.height = VH * k;
     canvas.style.width = Math.floor(VW * fit) + "px";
