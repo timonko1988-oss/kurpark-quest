@@ -1,9 +1,10 @@
-// Kurpark-Spiel – Schritt 1: Karte, Kamera, Spielfigur, Bewegung, Kollision
+// Kurpark-Spiel – bisher: Karte, Kamera, Spielfigur, Kollision, Schätze und Punkte
 (() => {
   const C = CONFIG;
   const VW = C.view.width, VH = C.view.height;
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
+  const rand = ([min, max]) => min + Math.random() * (max - min);
 
   // ---------- Karte ----------
   // Lauflängenkodierte Zeilen ("12.5W3G") zu einem Raster entpacken
@@ -29,6 +30,10 @@
   const state = {
     player: { ...C.player.start, dir: "down", moving: false, walkTime: 0 },
     camera: { x: 0, y: 0 },
+    items: [],          // Schätze auf der Karte: { type, x, y, age, life }
+    popups: [],         // aufsteigende „+100“-Texte: { x, y, text, color, age }
+    score: 0,
+    spawnTimer: 0,
     showWalkable: false,
   };
 
@@ -73,9 +78,59 @@
     state.camera.y = Math.round(clamp(state.player.y - VH / 2, mapH - VH));
   }
 
+  // ---------- Schätze ----------
+  // Freie Fläche auf Weg oder Rasen, nicht unter Bäumen: dort dürfen Schätze erscheinen
+  function isOpenGround(x, y) {
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const c = cellAt(x + dx * MAP_CELL, y + dy * MAP_CELL);
+      if (c !== "W" && c !== "G") return false;
+    }
+    return true;
+  }
+
+  function pickItemType() {
+    const types = C.items.types;
+    let r = Math.random() * types.reduce((sum, t) => sum + t.chance, 0);
+    return types.find(t => (r -= t.chance) < 0) || types[0];
+  }
+
+  // Zufällige Stelle im sichtbaren Ausschnitt (plus Rand) suchen; findet sich keine, entfällt dieser Schatz
+  function spawnItem() {
+    const I = C.items, cam = state.camera, p = state.player, m = I.spawnMargin;
+    for (let tries = 0; tries < 40; tries++) {
+      const x = cam.x - m + Math.random() * (VW + 2 * m);
+      const y = cam.y - m + Math.random() * (VH + 2 * m);
+      const tooClose = o => Math.hypot(x - o.x, y - o.y) < I.minDistance;
+      if (!isOpenGround(x, y) || tooClose(p) || state.items.some(tooClose)) continue;
+      state.items.push({ type: pickItemType(), x, y, age: 0, life: rand(I.lifetime) });
+      return;
+    }
+  }
+
+  const POPUP_TIME = 0.9;   // Sekunden, die ein „+100“ sichtbar bleibt
+  function updateItems(dt) {
+    const I = C.items, p = state.player;
+    state.spawnTimer -= dt;
+    if (state.spawnTimer <= 0) {
+      if (state.items.length < I.maxOnMap) spawnItem();
+      state.spawnTimer = rand(I.spawnInterval);
+    }
+    state.items = state.items.filter(it => {
+      it.age += dt;
+      if (Math.hypot(it.x - p.x, it.y - p.y) < I.pickupRadius) {
+        state.score += it.type.points;
+        state.popups.push({ x: it.x, y: it.y - 56, text: "+" + it.type.points, color: it.type.color, age: 0 });
+        return false;
+      }
+      return it.age < it.life;
+    });
+    state.popups = state.popups.filter(pop => (pop.age += dt) < POPUP_TIME);
+  }
+
   function update(dt) {
     updatePlayer(dt);
     updateCamera();
+    updateItems(dt);
   }
 
   // ---------- Darstellung ----------
@@ -85,7 +140,7 @@
     img.onerror = () => fail(new Error("Bild fehlt: " + src));
     img.src = src;
   });
-  let mapImg, playerImg, foregroundImg, walkOverlay;
+  let mapImg, playerImg, foregroundImg, itemsImg, walkOverlay;
 
   // Gesperrte Zellen als kleines Bild (1 Zelle = 1 Pixel), zum Prüfen mit Taste L
   function buildWalkOverlay() {
@@ -113,19 +168,67 @@
     ctx.restore();
   }
 
+  function drawItem(it) {
+    const I = C.items, size = I.frame;
+    const left = it.life - it.age;
+    if (left < I.blinkTime && Math.floor(it.age * 8) % 2) return;            // blinkt kurz vor dem Verschwinden
+    const sx = Math.round(it.x - state.camera.x), sy = Math.round(it.y - state.camera.y);
+    const bob = Math.round(Math.sin(it.age * 5) * 2);                         // leichtes Schweben
+    ctx.fillStyle = "rgba(255, 244, 170, 0.35)";
+    ctx.beginPath(); ctx.arc(sx, sy - size / 2, 15 + bob, 0, Math.PI * 2); ctx.fill();   // Leuchten
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    ctx.beginPath(); ctx.ellipse(sx, sy, 8, 3, 0, 0, Math.PI * 2); ctx.fill();           // Schatten
+    ctx.drawImage(itemsImg, I.types.indexOf(it.type) * size, 0, size, size, sx - size / 2, sy - size - 2 + bob, size, size);
+  }
+
+  function drawPopups() {
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.textAlign = "center";
+    ctx.lineWidth = 3; ctx.strokeStyle = "#14203a";
+    for (const pop of state.popups) {
+      const x = Math.round(pop.x - state.camera.x), y = Math.round(pop.y - state.camera.y - pop.age * 30);
+      ctx.globalAlpha = Math.min(1, 2.5 * (1 - pop.age / POPUP_TIME));   // erst am Ende ausblenden
+      ctx.strokeText(pop.text, x, y);
+      ctx.fillStyle = pop.color; ctx.fillText(pop.text, x, y);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- Anzeige (HTML über dem Spielfeld) ----------
+  const scoreEl = document.getElementById("score");
+  let shownScore = -1;
+  function updateHud() {
+    if (state.score === shownScore) return;
+    shownScore = state.score;
+    scoreEl.textContent = String(shownScore).padStart(4, "0");
+  }
+  // Legende „Schatz = Punkte“ aus der Config aufbauen
+  C.items.types.forEach((t, i) => {
+    const icon = document.createElement("i");
+    icon.className = "icon"; icon.title = t.name;
+    icon.style.backgroundImage = `url(${C.items.image})`;
+    icon.style.setProperty("--i", i);
+    document.getElementById("legend").append(icon, "+" + t.points);
+  });
+
   function render() {
     const cam = state.camera;
     ctx.drawImage(mapImg, cam.x, cam.y, VW, VH, 0, 0, VW, VH);
     if (state.showWalkable) {
       ctx.drawImage(walkOverlay, cam.x / MAP_CELL, cam.y / MAP_CELL, VW / MAP_CELL, VH / MAP_CELL, 0, 0, VW, VH);
     }
-    drawPlayer();
+    // Schätze und Figur von hinten nach vorn zeichnen
+    const things = state.items.map(it => ({ y: it.y, draw: () => drawItem(it) }));
+    things.push({ y: state.player.y, draw: drawPlayer });
+    things.sort((a, b) => a.y - b.y).forEach(t => t.draw());
     // Steht die Figur unter einer Baumkrone oder hinter einer Laterne, liegt der Vordergrund über ihr
     if (cellAt(state.player.x, state.player.y) === "U") {
       ctx.globalAlpha = C.map.canopyAlpha;
       ctx.drawImage(foregroundImg, cam.x, cam.y, VW, VH, 0, 0, VW, VH);
       ctx.globalAlpha = 1;
     }
+    drawPopups();
+    updateHud();
   }
 
   // Canvas in ganzzahliger Vergrößerung zeichnen und per CSS ins Fenster einpassen: scharfe Pixel bei jeder Fenstergröße
@@ -134,6 +237,7 @@
     const k = Math.max(1, Math.ceil(fit));
     canvas.width = VW * k; canvas.height = VH * k;
     canvas.style.width = Math.floor(VW * fit) + "px";
+    canvas.parentElement.style.setProperty("--s", fit);   // Anzeige skaliert mit
     ctx.setTransform(k, 0, 0, k, 0, 0);
     ctx.imageSmoothingEnabled = false;
   }
@@ -148,9 +252,11 @@
     requestAnimationFrame(loop);
   }
 
-  Promise.all([C.map.image, C.map.foreground, C.player.image].map(loadImage)).then(([m, f, p]) => {
-    mapImg = m; foregroundImg = f; playerImg = p; walkOverlay = buildWalkOverlay();
+  Promise.all([C.map.image, C.map.foreground, C.player.image, C.items.image].map(loadImage)).then(([m, f, p, i]) => {
+    mapImg = m; foregroundImg = f; playerImg = p; itemsImg = i; walkOverlay = buildWalkOverlay();
     addEventListener("resize", resize); resize();
+    updateCamera();
+    for (let n = 0; n < C.items.startCount; n++) spawnItem();
     requestAnimationFrame(t => { last = t; loop(t); });
   }).catch(err => { document.getElementById("hint").textContent = err.message; });
 
