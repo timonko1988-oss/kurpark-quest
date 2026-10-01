@@ -6,41 +6,95 @@
 <title>Kurpark-Spiel Bad Pyrmont</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
 <style>
-  /* Layout: ein Spielfeld mittig im Fenster, Anzeige liegt darüber, darunter eine Hinweiszeile. Bewusst nur ein Erscheinungsbild (Parkgrün). */
+  /* Layout: ein Spielfeld mittig im Fenster; Anzeige, Start- und Endbildschirm liegen darüber, darunter eine Hinweiszeile.
+     Bewusst nur ein Erscheinungsbild (Parkgrün bei Nacht). */
   :root { --bg: #14291b; --frame: #0a1710; --text: #dcebd2; --key: #f3d77a;
           --panel: #14203ae6; --panel-edge: #f4f1e4; --hud-text: #ffffff; --hud-label: #b9c7e6;
-          --pixel-font: "Press Start 2P", ui-monospace, "Courier New", monospace; color-scheme: dark; }
+          --energy: #6fdc5a; --warn: #ff6b5e; --veil: #0c1a12b3; --button-text: #2a2208;
+          --pixel-font: "Press Start 2P", ui-monospace, "Courier New", monospace;
+          --text-font: system-ui, "Segoe UI", sans-serif; color-scheme: dark; }
   html, body { height: 100%; }
+  [hidden] { display: none !important; }
   body { margin: 0; padding-inline: 16px; box-sizing: border-box; background: var(--bg); color: var(--text);
-         font: 14px/1.4 system-ui, "Segoe UI", sans-serif;
+         font: 14px/1.4 var(--text-font);
          display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+  /* --s = Vergrößerung des Spielfelds; alle Maße der Anzeige und der Bildschirme hängen daran */
   #stage { position: relative; --s: 1; max-width: 100%; }
   #game { display: block; max-width: 100%; outline: 3px solid var(--frame); }
-  /* --s = Vergrößerung des Spielfelds; alle Maße der Anzeige hängen daran */
+
   #hud { position: absolute; inset: 0 0 auto 0; display: flex; justify-content: space-between; align-items: flex-start;
          padding: calc(6px * var(--s)); pointer-events: none;
          font: calc(8px * var(--s))/1 var(--pixel-font); color: var(--hud-text); }
   .panel { display: flex; align-items: center; gap: calc(6px * var(--s)); padding: calc(5px * var(--s)) calc(7px * var(--s));
            background: var(--panel); border: calc(1px * var(--s)) solid var(--panel-edge); border-radius: calc(2px * var(--s)); }
   .label { color: var(--hud-label); }
+  #energy { width: calc(70px * var(--s)); height: calc(8px * var(--s)); background: var(--frame); }
+  #energy-fill { display: block; height: 100%; width: 100%; background: var(--energy);
+                 /* Lücken alle 7 px ergeben zehn Kästchen */
+                 -webkit-mask: repeating-linear-gradient(90deg, #000 0 calc(6px * var(--s)), transparent 0 calc(7px * var(--s)));
+                         mask: repeating-linear-gradient(90deg, #000 0 calc(6px * var(--s)), transparent 0 calc(7px * var(--s))); }
+  #energy.warn #energy-fill { background: var(--warn); }
+  #time.warn { color: var(--warn); animation: blink 0.5s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.35; } }
+
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--veil); }
+  .card { box-sizing: border-box; width: calc(400px * var(--s)); padding: calc(16px * var(--s)) calc(20px * var(--s));
+          display: flex; flex-direction: column; align-items: center; gap: calc(9px * var(--s)); text-align: center;
+          background: var(--panel); border: calc(2px * var(--s)) solid var(--panel-edge); border-radius: calc(3px * var(--s));
+          color: var(--hud-text); font: calc(8.5px * var(--s))/1.5 var(--text-font); }
+  .card h1 { margin: 0; font: calc(16px * var(--s))/1.2 var(--pixel-font); color: var(--key); text-wrap: balance; }
+  .card p, .card ul { margin: 0; padding: 0; }
+  .sub { font: calc(7px * var(--s))/1 var(--pixel-font); color: var(--hud-label); letter-spacing: 0.08em; }
+  .keys { list-style: none; display: flex; flex-direction: column; gap: calc(3px * var(--s)); }
+  .legend { display: flex; align-items: center; gap: calc(6px * var(--s)); font: calc(7px * var(--s))/1 var(--pixel-font); }
+  .result { font: calc(11px * var(--s))/1 var(--pixel-font); }
   .icon { width: calc(14px * var(--s)); height: calc(14px * var(--s)); image-rendering: pixelated;
           background-repeat: no-repeat; background-size: auto 100%; background-position: calc(-14px * var(--s) * var(--i)) 0; }
-  .icon:not(:first-child) { margin-left: calc(4px * var(--s)); }
-  #hint { height: 36px; line-height: 36px; margin: 0; text-align: center; }
+  .icon:not(:first-child) { margin-left: calc(6px * var(--s)); }
+  button { margin-top: calc(3px * var(--s)); padding: calc(8px * var(--s)) calc(14px * var(--s)); cursor: pointer;
+           font: calc(9px * var(--s))/1 var(--pixel-font); color: var(--button-text); background: var(--key);
+           border: calc(2px * var(--s)) solid var(--panel-edge); border-radius: calc(2px * var(--s)); }
+  button:hover { filter: brightness(1.1); }
+  button:focus-visible { outline: calc(2px * var(--s)) solid var(--hud-text); outline-offset: calc(2px * var(--s)); }
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  #hint { height: 36px; line-height: 36px; margin: 0; text-align: center; white-space: nowrap; overflow: hidden; max-width: 100%; }
   kbd { font: inherit; font-weight: 600; color: var(--key); }
+  @media (prefers-reduced-motion: reduce) { #time.warn { animation: none; } }
 </style>
 </head>
 <body>
   <div id="stage">
     <canvas id="game" width="640" height="360"></canvas>
-    <div id="hud">
+    <div id="hud" hidden>
+      <div class="panel"><span class="label">ZEIT</span><span id="time">00:00</span></div>
       <div class="panel"><span class="label">PUNKTE</span><span id="score">0000</span></div>
-      <div class="panel" id="legend"></div>
+      <div class="panel"><span class="label">ENERGIE</span><span id="energy"><i id="energy-fill"></i></span></div>
+    </div>
+    <div id="start" class="overlay">
+      <div class="card">
+        <h1>Kurpark-Quest</h1>
+        <p class="sub">BAD PYRMONT</p>
+        <p>Sammle in <span id="duration">2:30</span> Minuten möglichst viele Schätze im Kurpark. Das Walken macht müde: An der Trampelquelle beim Brunnenmädchen tankst du neue Energie. Den Wildgänsen lässt du besser den Vortritt, jede Begegnung kostet etwas Puste.</p>
+        <ul class="keys">
+          <li><kbd>Pfeiltasten</kbd> laufen</li>
+          <li><kbd>Leertaste</kbd> halten: an der Trampelquelle trinken</li>
+        </ul>
+        <div id="legend" class="legend"></div>
+        <button id="play" type="button" disabled>Spielen</button>
+      </div>
+    </div>
+    <div id="end" class="overlay" hidden>
+      <div class="card">
+        <h1>Zeit vorbei!</h1>
+        <p class="result">Punkte: <span id="final">0</span></p>
+        <button id="again" type="button">Nochmal spielen</button>
+      </div>
     </div>
   </div>
-  <p id="hint"><kbd>Pfeiltasten</kbd> laufen und Schätze einsammeln · <kbd>L</kbd> Laufflächen anzeigen</p>
-  <script src="config.js"></script>
-  <script src="mapdata.js"></script>
-  <script src="game.js"></script>
+  <p id="hint"><kbd>Pfeiltasten</kbd> laufen · <kbd>Leertaste</kbd> trinken · <kbd>M</kbd> Ton aus/an · <kbd>L</kbd> Laufflächen</p>
+  <script src="config.js?v=4"></script>
+  <script src="mapdata.js?v=4"></script>
+  <script src="game.js?v=4"></script>
 </body>
 </html>
