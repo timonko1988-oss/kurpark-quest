@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kurpark-Spiel Bad Pyrmont</title>
+<style>
+  /* Layout: ein Spielfeld mittig im Fenster, darunter eine Hinweiszeile. Bewusst nur ein Erscheinungsbild (Parkgrün). */
+  :root { --bg: #14291b; --frame: #0a1710; --text: #dcebd2; --key: #f3d77a; color-scheme: dark; }
+  html, body { height: 100%; }
+  body { margin: 0; padding-inline: 16px; box-sizing: border-box; background: var(--bg); color: var(--text);
+         font: 14px/1.4 system-ui, "Segoe UI", sans-serif;
+         display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+  #game { display: block; max-width: 100%; outline: 3px solid var(--frame); }
+  #hint { height: 36px; line-height: 36px; margin: 0; text-align: center; }
+  kbd { font: inherit; font-weight: 600; color: var(--key); }
+</style>
+</head>
+<body>
+  <canvas id="game" width="640" height="360"></canvas>
+  <p id="hint"><kbd>Pfeiltasten</kbd> laufen · <kbd>L</kbd> Laufflächen anzeigen</p>
+  <script src="config.js"></script>
+  <script src="mapdata.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
