@@ -2,7 +2,11 @@
 const CONFIG = {
   view: { width: 640, height: 360 },      // sichtbarer Kartenausschnitt in Kartenpixeln
 
-  map: { image: "assets/karte.png" },     // Laufflächen: siehe mapdata.js
+  map: {
+    image: "assets/karte.png",            // Laufflächen: siehe mapdata.js
+    foreground: "assets/vordergrund.png", // Baumkronen und Laternen, hinter denen die Figur laufen kann
+    canopyAlpha: 0.7,                     // 1 = Figur ganz verdeckt, kleiner = Figur scheint durch
+  },
 
   player: {
     image: "assets/spieler.png",
@@ -12,5 +16,6 @@ const CONFIG = {
     frame: { width: 36, height: 54 },     // Größe eines Bildes im Sprite-Sheet
     anchor: { x: 18, y: 50 },             // Punkt im Bild, der auf der Fußposition liegt
     hitbox: { width: 6, height: 4 },      // Kollisionsfläche an den Füßen
+    slide: 8,                             // so weit (Pixel) weicht die Figur an Ecken und schrägen Kanten selbst aus
   },
 };

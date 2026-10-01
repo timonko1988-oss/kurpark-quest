@@ -53,8 +53,17 @@
     p.dir = dx > 0 ? "right" : dx < 0 ? "left" : dy > 0 ? "down" : "up";
     const dist = C.player.speed * dt / Math.hypot(dx, dy);   // diagonal nicht schneller
     // Achsen getrennt prüfen, damit die Figur an Kanten entlanggleitet
-    if (dx && canStand(p.x + dx * dist, p.y)) p.x += dx * dist;
-    if (dy && canStand(p.x, p.y + dy * dist)) p.y += dy * dist;
+    const step = (ax, ay) => canStand(p.x + ax, p.y + ay) && (p.x += ax, p.y += ay, true);
+    const s = C.player.slide;
+    if (dx && !step(dx * dist, 0) && !dy) {
+      // An schrägen Kanten und Ecken entlanggleiten, statt hängen zu bleiben
+      if (canStand(p.x + dx * dist, p.y - s)) step(0, -dist);
+      else if (canStand(p.x + dx * dist, p.y + s)) step(0, dist);
+    }
+    if (dy && !step(0, dy * dist) && !dx) {
+      if (canStand(p.x - s, p.y + dy * dist)) step(-dist, 0);
+      else if (canStand(p.x + s, p.y + dy * dist)) step(dist, 0);
+    }
     p.walkTime += dt;
   }
 
@@ -76,15 +85,17 @@
     img.onerror = () => fail(new Error("Bild fehlt: " + src));
     img.src = src;
   });
-  let mapImg, playerImg, walkOverlay;
+  let mapImg, playerImg, foregroundImg, walkOverlay;
 
   // Gesperrte Zellen als kleines Bild (1 Zelle = 1 Pixel), zum Prüfen mit Taste L
   function buildWalkOverlay() {
     const c = document.createElement("canvas");
     c.width = grid[0].length; c.height = grid.length;
     const g = c.getContext("2d");
-    g.fillStyle = "rgba(190, 0, 70, 0.6)";
-    grid.forEach((row, gy) => { for (let gx = 0; gx < row.length; gx++) if (row[gx] === ".") g.fillRect(gx, gy, 1, 1); });
+    const colors = { ".": "rgba(190, 0, 70, 0.6)", "U": "rgba(0, 110, 255, 0.55)" };   // gesperrt / unter Baumkrone
+    grid.forEach((row, gy) => {
+      for (let gx = 0; gx < row.length; gx++) if (colors[row[gx]]) { g.fillStyle = colors[row[gx]]; g.fillRect(gx, gy, 1, 1); }
+    });
     return c;
   }
 
@@ -109,6 +120,12 @@
       ctx.drawImage(walkOverlay, cam.x / MAP_CELL, cam.y / MAP_CELL, VW / MAP_CELL, VH / MAP_CELL, 0, 0, VW, VH);
     }
     drawPlayer();
+    // Steht die Figur unter einer Baumkrone oder hinter einer Laterne, liegt der Vordergrund über ihr
+    if (cellAt(state.player.x, state.player.y) === "U") {
+      ctx.globalAlpha = C.map.canopyAlpha;
+      ctx.drawImage(foregroundImg, cam.x, cam.y, VW, VH, 0, 0, VW, VH);
+      ctx.globalAlpha = 1;
+    }
   }
 
   // Canvas in ganzzahliger Vergrößerung zeichnen und per CSS ins Fenster einpassen: scharfe Pixel bei jeder Fenstergröße
@@ -131,8 +148,8 @@
     requestAnimationFrame(loop);
   }
 
-  Promise.all([loadImage(C.map.image), loadImage(C.player.image)]).then(([m, p]) => {
-    mapImg = m; playerImg = p; walkOverlay = buildWalkOverlay();
+  Promise.all([C.map.image, C.map.foreground, C.player.image].map(loadImage)).then(([m, f, p]) => {
+    mapImg = m; foregroundImg = f; playerImg = p; walkOverlay = buildWalkOverlay();
     addEventListener("resize", resize); resize();
     requestAnimationFrame(t => { last = t; loop(t); });
   }).catch(err => { document.getElementById("hint").textContent = err.message; });
