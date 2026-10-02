@@ -1,6 +1,6 @@
 // Alle veränderbaren Werte des Spiels. Die Spiellogik steht in game.js.
 const CONFIG = {
-  version: "9",                           // bei jeder neuen Version erhöhen (auch in index.html), dann lädt der Browser alles frisch
+  version: "10",                           // bei jeder neuen Version erhöhen (auch in index.html), dann lädt der Browser alles frisch
   view: { width: 640, height: 360 },      // sichtbarer Kartenausschnitt in Kartenpixeln
 
   round: {
@@ -48,12 +48,13 @@ const CONFIG = {
       { name: "Rose",       points: 50,  chance: 3,   color: "#ff8a8f" },
       { name: "Goldmünze",  points: 100, chance: 1.5, color: "#ffd84a" },
     ],
-    startCount: 3,                        // so viele liegen beim Start schon da
-    maxOnMap: 6,                          // mehr liegen nie gleichzeitig herum
-    spawnInterval: [1.5, 3.5],            // Sekunden bis zum nächsten Schatz (von, bis)
-    lifetime: [7, 12],                    // Sekunden, bis ein Schatz wieder verschwindet (von, bis)
+    startCount: 5,                        // so viele liegen beim Start schon da
+    maxOnMap: 10,                         // mehr liegen nie gleichzeitig herum
+    spawnInterval: [1, 2.2],              // Sekunden bis zum nächsten Schatz (von, bis)
+    lifetime: [11, 17],                   // Sekunden, bis ein Schatz wieder verschwindet (von, bis)
     blinkTime: 2.5,                       // so lange vor dem Verschwinden blinkt er
-    spawnMargin: 60,                      // Schätze erscheinen im sichtbaren Ausschnitt plus diesem Rand (Pixel)
+    spawnMargin: 260,                     // Schätze erscheinen im sichtbaren Ausschnitt plus diesem Rand (Pixel); Pfeile am Bildrand zeigen hin
+    springDistance: 240,                  // so weit vom Brunnenmädchen entfernt erscheinen Schätze mindestens (Pixel)
     minDistance: 70,                      // Mindestabstand zur Figur und zu anderen Schätzen (Pixel)
     pickupRadius: 18,                     // so nah muss die Figur herankommen (Pixel)
   },

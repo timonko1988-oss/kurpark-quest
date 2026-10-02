@@ -237,13 +237,14 @@
     return types.find(t => (r -= t.chance) < 0) || types[0];
   }
 
-  // Zufällige Stelle im sichtbaren Ausschnitt (plus Rand) suchen; findet sich keine, entfällt dieser Schatz
+  // Zufällige Stelle im sichtbaren Ausschnitt plus großem Rand suchen, aber nicht direkt am Brunnen;
+  // findet sich keine, entfällt dieser Schatz
   function spawnItem() {
     const I = C.items, cam = state.camera, m = I.spawnMargin;
     for (let tries = 0; tries < 40; tries++) {
       const pos = { x: cam.x - m + Math.random() * (VW + 2 * m), y: cam.y - m + Math.random() * (VH + 2 * m) };
       const tooClose = o => dist(pos, o) < I.minDistance;
-      if (!isOpenGround(pos.x, pos.y) || tooClose(state.player) || state.items.some(tooClose)) continue;
+      if (!isOpenGround(pos.x, pos.y) || tooClose(state.player) || state.items.some(tooClose) || dist(pos, C.spring) < I.springDistance) continue;
       state.items.push({ type: pickItemType(), ...pos, age: 0, life: rand(I.lifetime) });
       return;
     }
@@ -632,6 +633,23 @@
     if (it.life - it.age < C.items.blinkTime && Math.floor(it.age * 8) % 2) return;   // blinkt kurz vor dem Verschwinden
     drawTreasure(it.x, it.y, C.items.types.indexOf(it.type), it.age);
   }
+  // Kleine Pfeile am Bildrand zeigen zu Schätzen, die außerhalb des Ausschnitts liegen
+  function drawItemPointers() {
+    const cx = VW / 2, cy = VH / 2 + 10, rx = VW / 2 - 12, ry = VH / 2 - 26;       // oben bleibt Platz für die Anzeige
+    for (const it of state.items) {
+      if (inView(it.x, it.y, 0)) continue;
+      if (it.life - it.age < C.items.blinkTime && Math.floor(it.age * 8) % 2) continue;
+      const dx = it.x - state.camera.x - cx, dy = it.y - state.camera.y - cy;
+      const k = Math.min(rx / Math.abs(dx || 1), ry / Math.abs(dy || 1));          // auf den Bildrand schieben
+      ctx.save();
+      ctx.translate(Math.round(cx + dx * k), Math.round(cy + dy * k));
+      ctx.rotate(Math.atan2(dy, dx));
+      ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-4, -6); ctx.lineTo(-4, 6); ctx.closePath();
+      ctx.lineWidth = 3; ctx.strokeStyle = "#14203a"; ctx.stroke();
+      ctx.fillStyle = it.type.color; ctx.fill();
+      ctx.restore();
+    }
+  }
   const drawCrown = () => drawTreasure(C.crown.x, C.crown.y, C.crown.frame, state.clock, 19 + Math.sin(state.clock * 6) * 2);
 
   // ---------- Nebel: weiche Schwaden wabern über den Wolkenfeldern am Kartenrand ----------
@@ -719,7 +737,7 @@
     }
     drawFog();
     drawSpringMarker();
-    if (state.mode === "play") { state.critters.forEach(drawCry); drawPopups(); drawPrompt(); }
+    if (state.mode === "play") { state.critters.forEach(drawCry); drawItemPointers(); drawPopups(); drawPrompt(); }
     updateHud();
   }
 
