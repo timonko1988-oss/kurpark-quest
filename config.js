@@ -1,6 +1,6 @@
 // Alle veränderbaren Werte des Spiels. Die Spiellogik steht in game.js.
 const CONFIG = {
-  version: "5",                           // bei jeder neuen Version erhöhen (auch in index.html), dann lädt der Browser alles frisch
+  version: "6",                           // bei jeder neuen Version erhöhen (auch in index.html), dann lädt der Browser alles frisch
   view: { width: 640, height: 360 },      // sichtbarer Kartenausschnitt in Kartenpixeln
 
   round: {
@@ -34,9 +34,9 @@ const CONFIG = {
 
   // Trampelquelle am Brunnenmädchen
   spring: {
-    x: 793, y: 371, radius: 88,           // in diesem Umkreis kann getrunken werden
+    x: 793, y: 374, radius: 105,          // in diesem Umkreis kann getrunken werden
     refillPerSecond: 50,                  // Leertaste halten: 0 auf 100 in 2 Sekunden
-    marker: { x: 793, y: 282 },           // hier schwebt der Wassertropfen
+    marker: { x: 793, y: 268 },           // hier schwebt der Wassertropfen
   },
 
   items: {
@@ -83,7 +83,7 @@ const CONFIG = {
     // Fontänen: Fußpunkt, Höhe und Breite des Strahls, Tropfen pro Sekunde, Größe der Wellenringe (0 = keine)
     fountains: [
       { x: 418,  y: 123, height: 50, spread: 20, drops: 120, ripple: 34 },   // Springbrunnenteich
-      { x: 1274, y: 351, height: 20, spread: 7,  drops: 28, ripple: 0 },    // Brunnen vor dem Hotel
+      { x: 1327, y: 344, height: 15, spread: 5,  drops: 22, ripple: 0 },    // Brunnen vor dem Hotel
       { x: 490,  y: 712, height: 10, spread: 4,  drops: 14, ripple: 0 },    // Schlossinsel
       { x: 501,  y: 753, height: 9,  spread: 4,  drops: 14, ripple: 0 },
       { x: 793,  y: 641, height: 9,  spread: 4,  drops: 14, ripple: 0 },    // Wasserbecken
@@ -95,15 +95,6 @@ const CONFIG = {
       { x: 255, y: 500, width: 43, height: 26 },
     ],
     fallSpeed: 38,
-  },
-
-  // Namensschilder: erscheinen kurz, wenn die Figur den Umkreis betritt
-  places: {
-    signTime: 2.8,                        // Sekunden
-    list: [
-      { name: "Schloss Bad Pyrmont", x: 480, y: 700, radius: 150 },
-      { name: "Brunnenmädchen",      x: 793, y: 371, radius: 100 },
-    ],
   },
 
   touch: { radius: 44, deadZone: 10 },    // Joystick: Auslenkung und toter Bereich in Bildschirmpixeln
@@ -118,7 +109,6 @@ const CONFIG = {
       drink:   [[260, 0.07, "sine", 520], [0, 0.03], [300, 0.07, "sine", 600]],                                                  // gluck, gluck
       ahh:     [[740, 0.38, "triangle", 370]],                                                                                   // zufriedenes „Ahh“
       tired:   [[311, 0.26, "sawtooth", 294], [294, 0.26, "sawtooth", 277], [277, 0.26, "sawtooth", 262], [262, 0.6, "sawtooth", 196]],   // traurige Posaune
-      sign:    [[1319, 0.07, "triangle"], [1760, 0.16, "triangle"]],
       tick:    [[990, 0.06, "square"]],
       end:     [[784, 0.12, "square"], [659, 0.12, "square"], [523, 0.12, "square"], [392, 0.12, "square"], [523, 0.36, "square"]],
     },

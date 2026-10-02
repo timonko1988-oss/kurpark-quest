@@ -58,8 +58,6 @@
       popups: [],         // aufsteigende Texte wie „+100“: { x, y, text, color, age }
       geese: C.geese.starts.map(makeGoose),
       spawnTimer: 0,
-      place: null,        // Ort, in dem die Figur gerade steht
-      sign: null,         // eingeblendetes Namensschild: { text, age }
       wasEmpty: false, wasFull: true,
     });
     updateCamera();
@@ -228,14 +226,6 @@
     if (empty && !state.wasEmpty) playSound("tired");
     if (full && !state.wasFull) playSound("ahh");
     state.wasEmpty = empty; state.wasFull = full;
-  }
-
-  // ---------- Orte: Namensschild beim Betreten ----------
-  function updatePlaces(dt) {
-    const place = C.places.list.find(p => dist(state.player, p) < p.radius) || null;
-    if (place && place.name !== state.place) { state.sign = { text: place.name, age: 0 }; playSound("sign"); }
-    state.place = place && place.name;
-    if (state.sign && (state.sign.age += dt) > C.places.signTime) state.sign = null;
   }
 
   // ---------- Schätze ----------
@@ -530,26 +520,13 @@
     ctx.globalAlpha = 1;
   }
 
-  // Namensschild oben in der Mitte, blendet am Anfang und Ende weich
-  function drawSign() {
-    const sg = state.sign;
-    if (!sg) return;
-    ctx.font = `10px ${PIXEL_FONT}`;
-    const w = Math.ceil(ctx.measureText(sg.text).width) + 20, x = Math.round((VW - w) / 2), y = 40;
-    ctx.globalAlpha = Math.min(1, sg.age * 5, (C.places.signTime - sg.age) * 3);
-    ctx.fillStyle = "#f4f1e4"; ctx.fillRect(x - 1, y - 1, w + 2, 24);
-    ctx.fillStyle = "#14203a"; ctx.fillRect(x, y, w, 22);
-    ctx.textAlign = "center"; ctx.fillStyle = "#f3d77a"; ctx.fillText(sg.text, VW / 2, y + 16);
-    ctx.globalAlpha = 1;
-  }
-
   // Hinweiszeile unten im Spielfeld
   const isTouch = () => document.body.classList.contains("touch");
   function drawPrompt() {
     let text = "";
     if (state.drinking) text = "GLUCK, GLUCK ...";
     else if (atSpring() && state.energy < C.energy.max - 5) text = isTouch() ? "TRINKEN GEDRÜCKT HALTEN" : "LEERTASTE HALTEN: TRINKEN";
-    else if (state.energy <= 0) text = "ERSCHÖPFT! AB ZUR TRAMPELQUELLE";
+    else if (state.energy <= 0) text = "ERSCHÖPFT! AB ZUM BRUNNENMÄDCHEN";
     if (text) drawText(text, VW / 2, VH - 14, "#ffffff");
   }
 
@@ -578,7 +555,7 @@
       }
     }
     drawSpringMarker();
-    if (state.mode === "play") { state.geese.forEach(drawHonk); drawPopups(); drawSign(); drawPrompt(); }
+    if (state.mode === "play") { state.geese.forEach(drawHonk); drawPopups(); drawPrompt(); }
     updateHud();
   }
 
@@ -645,7 +622,6 @@
     updateCamera();
     updateItems(dt);
     updateGeese(dt);
-    updatePlaces(dt);
     state.time -= dt;
     const secs = Math.ceil(state.time);
     if (secs <= C.round.warnAt && secs !== lastTick && secs > 0) { lastTick = secs; playSound("tick"); }
