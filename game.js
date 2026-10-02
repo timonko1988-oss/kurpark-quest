@@ -51,12 +51,14 @@
       time: C.round.duration,
       score: 0,
       energy: C.energy.max,
-      protect: 0,         // Schutzzeit nach einer Gänse-Berührung
+      protect: 0,         // Schutzzeit nach einer Berührung mit Gans oder Igel
       drinking: false,
       player: { ...C.player.start, dir: "down", moving: false, walkTime: 0 },
       items: [],          // { type, x, y, age, life }
       popups: [],         // aufsteigende Texte wie „+100“: { x, y, text, color, age }
-      geese: C.geese.starts.map(makeGoose),
+      critters: KINDS.flatMap(kind => kind.starts.map(start => makeCritter(kind, start))),   // Gänse und Igel
+      squirrel: { mode: "away", timer: rand(C.squirrel.interval) },
+      crownTaken: false,
       spawnTimer: 0,
       wasEmpty: false, wasFull: true,
     });
@@ -266,14 +268,23 @@
       }
       return it.age < it.life;
     });
+    // Die Krone im Schloss gibt es nur einmal pro Runde
+    const K = C.crown;
+    if (!state.crownTaken && dist(K, p) < K.pickupRadius) {
+      state.crownTaken = true;
+      state.score += K.points;
+      addPopup(K.x, K.y - 50, "+" + K.points, K.color);
+      playSound("crown");
+    }
     state.popups = state.popups.filter(pop => (pop.age += dt) < POPUP_TIME);
   }
 
-  // ---------- Wildgänse ----------
-  const GOOSE_BOX = { width: 10, height: 6 };
+  // ---------- Wildgänse und Igel: laufen herum und kosten bei Berührung Energie ----------
+  const KINDS = [{ ...C.geese, img: "goose" }, { ...C.hedgehogs, img: "hedgehog" }];
+  const CRITTER_BOX = { width: 10, height: 6 };
 
   // Startplatz auf die nächste freie Stelle schieben, falls er nicht begehbar ist
-  function makeGoose(start) {
+  function makeCritter(kind, start) {
     let pos = start;
     search: for (let r = 0; r <= 120; r += MAP_CELL) {
       for (let a = 0; a < 16; a++) {
@@ -281,39 +292,115 @@
         if (isOpenGround(cand.x, cand.y)) { pos = cand; break search; }
       }
     }
-    return { x: pos.x, y: pos.y, home: { ...pos }, vx: 0, vy: 0, faceLeft: Math.random() < 0.5,
-             moving: false, timer: Math.random() * 1.5, walkTime: 0, honk: 0 };
+    return { kind, x: pos.x, y: pos.y, home: { ...pos }, vx: 0, vy: 0, faceLeft: Math.random() < 0.5,
+             moving: false, timer: Math.random() * 1.5, walkTime: 0, cry: 0 };
   }
 
-  function updateGeese(dt) {
-    const G = C.geese, p = state.player;
+  function updateCritters(dt) {
+    const p = state.player;
     state.protect = Math.max(0, state.protect - dt);
-    for (const g of state.geese) {
-      g.honk = Math.max(0, g.honk - dt);
-      if ((g.timer -= dt) <= 0) {
-        g.moving = !g.moving;
-        g.timer = rand(g.moving ? G.walkTime : G.pauseTime);
-        if (g.moving) {
-          // neue Richtung: zufällig, oder zurück zum Startplatz, wenn sie zu weit weg ist
-          const angle = dist(g, g.home) > G.homeRadius
-            ? Math.atan2(g.home.y - g.y, g.home.x - g.x) + (Math.random() - 0.5)
+    for (const c of state.critters) {
+      const K = c.kind;
+      c.cry = Math.max(0, c.cry - dt);
+      if ((c.timer -= dt) <= 0) {
+        c.moving = !c.moving;
+        c.timer = rand(c.moving ? K.walkTime : K.pauseTime);
+        if (c.moving) {
+          // neue Richtung: zufällig, oder zurück zum Startplatz, wenn das Tier zu weit weg ist
+          const angle = dist(c, c.home) > K.homeRadius
+            ? Math.atan2(c.home.y - c.y, c.home.x - c.x) + (Math.random() - 0.5)
             : Math.random() * Math.PI * 2;
-          g.vx = Math.cos(angle) * G.speed; g.vy = Math.sin(angle) * G.speed;
-          g.faceLeft = g.vx < 0;
+          c.vx = Math.cos(angle) * K.speed; c.vy = Math.sin(angle) * K.speed;
+          c.faceLeft = c.vx < 0;
         }
       }
-      if (g.moving) {
-        const nx = g.x + g.vx * dt, ny = g.y + g.vy * dt;
-        if (canStand(nx, ny, GOOSE_BOX, OPEN)) { g.x = nx; g.y = ny; g.walkTime += dt; }
-        else g.timer = 0;                                       // Hindernis: stehen bleiben, dann neue Richtung
+      if (c.moving) {
+        const nx = c.x + c.vx * dt, ny = c.y + c.vy * dt;
+        if (canStand(nx, ny, CRITTER_BOX, OPEN)) { c.x = nx; c.y = ny; c.walkTime += dt; }
+        else c.timer = 0;                                       // Hindernis: stehen bleiben, dann neue Richtung
       }
-      if (state.protect <= 0 && dist(g, p) < G.hitRadius) {
-        state.energy = Math.max(0, state.energy - G.energyLoss);
-        state.protect = G.protectTime;
-        g.honk = 0.8;
-        addPopup(p.x, p.y - 56, "-" + G.energyLoss, G.color);
-        playSound("honk");
+      if (state.protect <= 0 && dist(c, p) < K.hitRadius) {
+        state.energy = Math.max(0, state.energy - K.energyLoss);
+        state.protect = K.protectTime;
+        c.cry = 0.8;
+        addPopup(p.x, p.y - 56, "-" + K.energyLoss, K.color);
+        playSound(K.sound);
       }
+    }
+  }
+
+  // ---------- Eichhörnchen: klaut herumliegende Schätze; wer es mit Beute erwischt, bekommt die Punkte ----------
+  function lineHas(ax, ay, bx, by, test) {
+    for (let k = 0; k <= 1.001; k += 0.05) if (test(ax + (bx - ax) * k, ay + (by - ay) * k)) return true;
+    return false;
+  }
+  function updateSquirrel(dt) {
+    const Q = C.squirrel, q = state.squirrel, p = state.player;
+    if (q.mode === "away") {
+      if ((q.timer -= dt) > 0 || !state.items.length) return;
+      // kommt aus zufälliger Richtung angerannt, aber nie übers Wasser
+      const target = state.items[Math.floor(Math.random() * state.items.length)];
+      const a = Math.random() * Math.PI * 2, d = rand(Q.range);
+      const from = { x: target.x + Math.cos(a) * d, y: target.y + Math.sin(a) * d };
+      if (lineHas(from.x, from.y, target.x, target.y, (x, y) => cellAt(x, y) === "~")) { q.timer = 0.3; return; }
+      Object.assign(q, { mode: "fetch", x: from.x, y: from.y, from, target, loot: null, run: 0 });
+      return;
+    }
+    if (q.mode === "fetch" && !state.items.includes(q.target)) q.mode = "flee";   // Schatz ist schon weg: Rückzug
+    const goal = q.mode === "fetch" ? q.target : q.from;
+    const d = dist(q, goal), step = Q.speed * dt;
+    q.faceLeft = goal.x < q.x; q.run += dt;
+    if (d > step) { q.x += (goal.x - q.x) / d * step; q.y += (goal.y - q.y) / d * step; }
+    else if (q.mode === "fetch") {
+      state.items.splice(state.items.indexOf(q.target), 1);
+      q.loot = q.target.type; q.mode = "flee";
+      addPopup(q.x, q.y - 40, "GEKLAUT!", Q.color);
+      playSound("steal");
+    } else { q.mode = "away"; q.timer = rand(Q.interval); }
+    if (q.loot && dist(q, p) < Q.catchRadius) {
+      state.score += q.loot.points;
+      addPopup(q.x, q.y - 40, "+" + q.loot.points, q.loot.color);
+      playSound("collect", 1.3);
+      q.loot = null;
+    }
+  }
+
+  // ---------- Leben auf dem Wasser: Schwäne gleiten umher, im Schlossgraben springt ab und zu ein Karpfen ----------
+  const isWater = (x, y) => [[0, 0], [-8, 0], [8, 0], [0, -6], [0, 6]].every(([dx, dy]) => cellAt(x + dx, y + dy) === "~");
+  const swans = C.swans.starts.map(s => ({ ...s, target: null, wait: Math.random() * 3, faceLeft: Math.random() < 0.5 }));
+  function updateSwans(dt) {
+    const S = C.swans;
+    for (const s of swans) {
+      if (s.wait > 0) { s.wait -= dt; continue; }
+      if (!s.target) {
+        // neues Ziel in der Nähe; gilt nur, wenn der ganze Weg dorthin über Wasser führt
+        const a = Math.random() * Math.PI * 2, d = rand(S.hop);
+        const t = { x: s.x + Math.cos(a) * d, y: s.y + Math.sin(a) * d };
+        if (!lineHas(s.x, s.y, t.x, t.y, (x, y) => !isWater(x, y))) { s.target = t; s.faceLeft = t.x < s.x; }
+        continue;
+      }
+      const d = dist(s, s.target), step = S.speed * dt;
+      if (d <= step) { s.target = null; s.wait = rand(S.pause); }
+      else { s.x += (s.target.x - s.x) / d * step; s.y += (s.target.y - s.y) / d * step; }
+    }
+  }
+
+  const carp = { timer: rand(C.carp.interval), jump: null };   // jump: { x, y, dir, t }
+  function updateCarp(dt) {
+    const K = C.carp, A = K.area;
+    if (carp.jump) { if ((carp.jump.t += dt) > K.duration) carp.jump = null; return; }
+    if ((carp.timer -= dt) > 0) return;
+    carp.timer = 0.5;                                    // falls sich keine freie Wasserstelle findet: gleich noch einmal versuchen
+    for (let tries = 0; tries < 30; tries++) {
+      // erst im sichtbaren Ausschnitt suchen, dann im ganzen Schlossgraben
+      const box = tries < 15 ? { x: state.camera.x, y: state.camera.y, width: VW, height: VH } : A;
+      const x = box.x + Math.random() * box.width, y = box.y + Math.random() * box.height;
+      const inArea = x > A.x && x < A.x + A.width && y > A.y && y < A.y + A.height;
+      if (!inArea || lineHas(x - K.length, y, x + K.length, y, (px, py) => !isWater(px, py))) continue;
+      carp.jump = { x, y, dir: Math.random() < 0.5 ? -1 : 1, t: 0 };
+      carp.timer = rand(K.interval);
+      if (state.mode === "play" && inView(x, y, 0)) playSound("splash");
+      return;
     }
   }
 
@@ -350,7 +437,7 @@
     }
     fxCtx.setTransform(1, 0, 0, 1, 0, 0);
     fxCtx.globalCompositeOperation = "destination-in";     // nur dort stehen lassen, wo Wasser ist
-    fxCtx.drawImage(waterImg, cam.x, cam.y, VW, VH, 0, 0, VW, VH);
+    fxCtx.drawImage(IMG.water, cam.x, cam.y, VW, VH, 0, 0, VW, VH);
     ctx.globalAlpha = C.water.strength;
     ctx.drawImage(fx, 0, 0);
     ctx.globalAlpha = 1;
@@ -418,7 +505,8 @@
   }
 
   // ---------- Darstellung ----------
-  let mapImg, playerImg, foregroundImg, itemsImg, gooseImg, waterImg, walkOverlay;
+  const IMG = {};          // geladene Bilder, siehe SOURCES am Dateiende
+  let walkOverlay;
 
   // Lädt ein Bild mit Versionsnummer, damit der Browser nach einem Update nicht das alte zeigt
   const loadImage = src => new Promise((ok, fail) => {
@@ -436,7 +524,7 @@
     const c = document.createElement("canvas");
     c.width = grid[0].length; c.height = grid.length;
     const g = c.getContext("2d");
-    const colors = { ".": "rgba(190, 0, 70, 0.6)", "U": "rgba(0, 110, 255, 0.55)" };   // gesperrt / unter Baumkrone
+    const colors = { ".": "rgba(190, 0, 70, 0.6)", "~": "rgba(190, 0, 70, 0.6)", "U": "rgba(0, 110, 255, 0.55)" };   // gesperrt / Wasser / unter Baumkrone
     grid.forEach((row, gy) => {
       for (let gx = 0; gx < row.length; gx++) if (colors[row[gx]]) { g.fillStyle = colors[row[gx]]; g.fillRect(gx, gy, 1, 1); }
     });
@@ -463,38 +551,109 @@
     const sx = Math.round(p.x - state.camera.x), sy = Math.round(p.y - state.camera.y);
     drawShadow(sx, sy, 11);
     if (state.protect > 0 && Math.floor(state.clock * 12) % 2) return;       // blinkt in der Schutzzeit
-    const col = p.moving ? Math.floor(p.walkTime * C.player.stepsPerSecond) % 4 : 1;
+    // Beim Trinken: Reihe 3 des Sprite-Sheets, Glas kurz vor der Brust, dann länger am Mund
+    const drink = state.drinking;
+    const col = drink ? (Math.floor(state.clock * 4) % 4 ? 1 : 0) : p.moving ? Math.floor(p.walkTime * C.player.stepsPerSecond) % 4 : 1;
     ctx.save();
     ctx.translate(sx, sy);
-    if (p.dir === "left") ctx.scale(-1, 1);
-    ctx.drawImage(playerImg, col * f.width, DIR_ROW[p.dir] * f.height, f.width, f.height, -a.x, -a.y, f.width, f.height);
+    if (p.dir === "left" && !drink) ctx.scale(-1, 1);
+    ctx.drawImage(IMG.player, col * f.width, (drink ? 3 : DIR_ROW[p.dir]) * f.height, f.width, f.height, -a.x, -a.y, f.width, f.height);
     ctx.restore();
   }
 
-  function drawGoose(g) {
-    const f = C.geese.frame, a = C.geese.anchor;
-    const sx = Math.round(g.x - state.camera.x), sy = Math.round(g.y - state.camera.y);
+  // Zeichnet ein Bild aus einem Sprite-Sheet mit dem Ankerpunkt auf (sx, sy), auf Wunsch gespiegelt
+  function drawSprite(img, f, a, col, sx, sy, flip) {
+    ctx.save();
+    ctx.translate(sx, sy);
+    if (flip) ctx.scale(-1, 1);
+    ctx.drawImage(img, col * f.width, 0, f.width, f.height, -a.x, -a.y, f.width, f.height);
+    ctx.restore();
+  }
+  const screenX = o => Math.round(o.x - state.camera.x), screenY = o => Math.round(o.y - state.camera.y);
+
+  function drawCritter(c) {
+    const K = c.kind, sx = screenX(c), sy = screenY(c);
+    drawShadow(sx, sy, K.frame.width / 3.6);
+    drawSprite(IMG[K.img], K.frame, K.anchor, c.moving ? Math.floor(c.walkTime * 6) % 2 : 0, sx, sy, c.faceLeft);
+  }
+  function drawCry(c) {
+    if (c.cry > 0) drawText(c.kind.cry, screenX(c) + (c.faceLeft ? -26 : 26), screenY(c) - 30, "#ffffff", 7);
+  }
+
+  function drawSquirrel() {
+    const Q = C.squirrel, q = state.squirrel, sx = screenX(q), sy = screenY(q), size = C.items.frame;
     drawShadow(sx, sy, 10);
-    const col = g.moving ? Math.floor(g.walkTime * 6) % 2 : 0;
-    ctx.save();
-    ctx.translate(sx, sy);
-    if (g.faceLeft) ctx.scale(-1, 1);
-    ctx.drawImage(gooseImg, col * f.width, 0, f.width, f.height, -a.x, -a.y, f.width, f.height);
-    ctx.restore();
-  }
-  function drawHonk(g) {
-    if (g.honk > 0) drawText("GAK!", Math.round(g.x - state.camera.x) + (g.faceLeft ? -26 : 26), Math.round(g.y - state.camera.y) - 30, "#ffffff", 7);
+    drawSprite(IMG.squirrel, Q.frame, Q.anchor, Math.floor(q.run * 10) % 2, sx, sy, q.faceLeft);
+    if (q.loot) ctx.drawImage(IMG.items, C.items.types.indexOf(q.loot) * size, 0, size, size, sx - 7, sy - Q.frame.height - 12, 14, 14);   // Beute über dem Kopf
   }
 
-  function drawItem(it) {
-    const I = C.items, size = I.frame;
-    if (it.life - it.age < I.blinkTime && Math.floor(it.age * 8) % 2) return;   // blinkt kurz vor dem Verschwinden
-    const sx = Math.round(it.x - state.camera.x), sy = Math.round(it.y - state.camera.y);
-    const bob = Math.round(Math.sin(it.age * 5) * 2);                            // leichtes Schweben
+  function drawSwans() {
+    const S = C.swans;
+    for (const s of swans) {
+      if (!inView(s.x, s.y, 40)) continue;
+      const sx = screenX(s), sy = screenY(s) + Math.round(Math.sin(state.clock * 2 + s.x) * 1);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.5)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(sx, sy + 2, 17 + Math.sin(state.clock * 3 + s.y) * 2, 5, 0, 0, Math.PI * 2); ctx.stroke();   // Wellenring
+      drawSprite(IMG.swan, S.frame, S.anchor, 0, sx, sy, s.faceLeft);
+    }
+  }
+
+  // Der Karpfen fliegt in einem Bogen aus dem Wasser; beim Absprung und Eintauchen spritzt es
+  function drawCarp() {
+    const j = carp.jump, K = C.carp;
+    if (!j || !inView(j.x, j.y, 60)) return;
+    const p = j.t / K.duration, cam = state.camera;
+    ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1;
+    for (const [at, from] of [[-1, 0], [1, 0.75]]) {          // Spritzer: Absprung ab p = 0, Eintauchen ab p = 0.75
+      const k = (p - from) / 0.4;
+      if (k < 0 || k > 1) continue;
+      ctx.globalAlpha = 1 - k;
+      ctx.beginPath(); ctx.ellipse(j.x + at * j.dir * K.length / 2 - cam.x, j.y - cam.y, 4 + k * 12, 2 + k * 4, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.save();
+    ctx.translate(Math.round(j.x + j.dir * K.length * (p - 0.5) - cam.x), Math.round(j.y - K.height * 4 * p * (1 - p) - cam.y));
+    ctx.scale(j.dir, 1);
+    ctx.rotate(Math.atan2(-K.height * 4 * (1 - 2 * p), K.length));   // Nase zeigt in Flugrichtung
+    ctx.drawImage(IMG.carp, -K.frame.width / 2, -K.frame.height / 2);
+    ctx.restore();
+  }
+
+  // Schatz mit Leuchten und Schatten; schwebt leicht auf und ab
+  function drawTreasure(x, y, index, age, glow = 15) {
+    const size = C.items.frame, sx = Math.round(x - state.camera.x), sy = Math.round(y - state.camera.y);
+    const bob = Math.round(Math.sin(age * 5) * 2);
     ctx.fillStyle = "rgba(255, 244, 170, 0.35)";
-    ctx.beginPath(); ctx.arc(sx, sy - size / 2, 15 + bob, 0, Math.PI * 2); ctx.fill();   // Leuchten
+    ctx.beginPath(); ctx.arc(sx, sy - size / 2, glow + bob, 0, Math.PI * 2); ctx.fill();
     drawShadow(sx, sy, 8);
-    ctx.drawImage(itemsImg, I.types.indexOf(it.type) * size, 0, size, size, sx - size / 2, sy - size - 2 + bob, size, size);
+    ctx.drawImage(IMG.items, index * size, 0, size, size, sx - size / 2, sy - size - 2 + bob, size, size);
+  }
+  function drawItem(it) {
+    if (it.life - it.age < C.items.blinkTime && Math.floor(it.age * 8) % 2) return;   // blinkt kurz vor dem Verschwinden
+    drawTreasure(it.x, it.y, C.items.types.indexOf(it.type), it.age);
+  }
+  const drawCrown = () => drawTreasure(C.crown.x, C.crown.y, C.crown.frame, state.clock, 19 + Math.sin(state.clock * 6) * 2);
+
+  // ---------- Nebel: weiche Schwaden wabern über den Wolkenfeldern am Kartenrand ----------
+  const puff = document.createElement("canvas");
+  puff.width = puff.height = 64;
+  {
+    const g = puff.getContext("2d"), grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(255, 255, 255, 1)"); grad.addColorStop(0.5, "rgba(255, 255, 255, 0.6)"); grad.addColorStop(1, "rgba(255, 255, 255, 0)");
+    g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  }
+  function drawFog() {
+    const F = C.fog, t = state.clock * F.speed, cam = state.camera;
+    ctx.imageSmoothingEnabled = true;                    // Nebel darf weich sein
+    MAP_FOG.forEach(([x, y, r], i) => {
+      if (!inView(x, y, r + F.drift)) return;
+      const px = x + Math.sin(t + i * 1.7) * F.drift, py = y + Math.cos(t * 0.8 + i * 2.3) * F.drift * 0.5;
+      const size = r * 2 * (1 + 0.12 * Math.sin(t * 1.3 + i));
+      ctx.globalAlpha = F.alpha * (0.7 + 0.3 * Math.sin(t * 1.1 + i * 0.9));
+      ctx.drawImage(puff, px - size / 2 - cam.x, py - size / 2 - cam.y, size, size);
+    });
+    ctx.globalAlpha = 1;
+    ctx.imageSmoothingEnabled = false;
   }
 
   // Wassertropfen über der Trampelquelle; pulsiert, wenn die Energie knapp wird
@@ -532,30 +691,35 @@
 
   function render() {
     const cam = state.camera, playing = state.mode !== "start";
-    ctx.drawImage(mapImg, cam.x, cam.y, VW, VH, 0, 0, VW, VH);
+    ctx.drawImage(IMG.map, cam.x, cam.y, VW, VH, 0, 0, VW, VH);
     drawShimmer();
     drawWaterfalls();
     drawFountains();
+    drawSwans();
+    drawCarp();
     if (state.showWalkable) {
       ctx.drawImage(walkOverlay, cam.x / MAP_CELL, cam.y / MAP_CELL, VW / MAP_CELL, VH / MAP_CELL, 0, 0, VW, VH);
     }
     if (playing) {
-      // Schätze, Gänse und Figur von hinten nach vorn zeichnen
+      // Schätze, Tiere und Figur von hinten nach vorn zeichnen
       const things = [
         ...state.items.map(it => ({ y: it.y, draw: () => drawItem(it) })),
-        ...state.geese.map(g => ({ y: g.y, draw: () => drawGoose(g) })),
+        ...state.critters.map(c => ({ y: c.y, draw: () => drawCritter(c) })),
         { y: state.player.y, draw: drawPlayer },
       ];
+      if (!state.crownTaken) things.push({ y: C.crown.y, draw: drawCrown });
+      if (state.squirrel.mode !== "away") things.push({ y: state.squirrel.y, draw: drawSquirrel });
       things.sort((a, b) => a.y - b.y).forEach(t => t.draw());
       // Steht die Figur unter einer Baumkrone, hinter einer Laterne oder im Hoteldurchgang, liegt der Vordergrund über ihr
       if (cellAt(state.player.x, state.player.y) === "U") {
         ctx.globalAlpha = C.map.canopyAlpha;
-        ctx.drawImage(foregroundImg, cam.x, cam.y, VW, VH, 0, 0, VW, VH);
+        ctx.drawImage(IMG.fg, cam.x, cam.y, VW, VH, 0, 0, VW, VH);
         ctx.globalAlpha = 1;
       }
     }
+    drawFog();
     drawSpringMarker();
-    if (state.mode === "play") { state.geese.forEach(drawHonk); drawPopups(); drawPrompt(); }
+    if (state.mode === "play") { state.critters.forEach(drawCry); drawPopups(); drawPrompt(); }
     updateHud();
   }
 
@@ -591,6 +755,7 @@
     state.time = 0;
     menuReadyAt = state.clock + 0.8;
     $("final").textContent = state.score.toLocaleString("de-DE");
+    $("rank").textContent = [...C.ranks].reverse().find(r => state.score >= r.min).title;
     $("end").hidden = false;
     stickEl.hidden = true; stick.id = null; stick.dx = stick.dy = 0; keys[" "] = false;
     stopMusic();
@@ -602,26 +767,30 @@
   // Texte des Startbildschirms aus der Config füllen
   $("duration").textContent = fmtTime(C.round.duration).replace(/^0/, "");
   function buildLegend() {
-    C.items.types.forEach((t, i) => {
+    const entries = [...C.items.types.map((t, i) => [t.name, i, t.points]), ["Krone im Schloss", C.crown.frame, C.crown.points]];
+    for (const [name, index, points] of entries) {
       const icon = document.createElement("i");
-      icon.className = "icon"; icon.title = t.name;
-      icon.style.backgroundImage = `url(${itemsImg.src})`;
-      icon.style.setProperty("--i", i);
-      $("legend").append(icon, "+" + t.points);
-    });
+      icon.className = "icon"; icon.title = name;
+      icon.style.backgroundImage = `url(${IMG.items.src})`;
+      icon.style.setProperty("--i", index);
+      $("legend").append(icon, "+" + points);
+    }
   }
 
   // ---------- Ablauf ----------
   function update(dt) {
     state.clock += dt;
     updateFountains(dt);
+    updateSwans(dt);
+    updateCarp(dt);
     updateMusic();
     if (state.mode !== "play" || portrait.matches) return;   // im Hochformat pausiert das Spiel („Bitte Handy drehen“)
     updateEnergy(dt);
     updatePlayer(dt);
     updateCamera();
     updateItems(dt);
-    updateGeese(dt);
+    updateCritters(dt);
+    updateSquirrel(dt);
     state.time -= dt;
     const secs = Math.ceil(state.time);
     if (secs <= C.round.warnAt && secs !== lastTick && secs > 0) { lastTick = secs; playSound("tick"); }
@@ -648,9 +817,9 @@
     requestAnimationFrame(loop);
   }
 
-  const images = [C.map.image, C.map.foreground, C.player.image, C.items.image, C.geese.image, C.water.mask];
-  Promise.all(images.map(loadImage)).then(loaded => {
-    [mapImg, foregroundImg, playerImg, itemsImg, gooseImg, waterImg] = loaded;
+  const SOURCES = { map: C.map.image, fg: C.map.foreground, water: C.water.mask, player: C.player.image, items: C.items.image,
+                    goose: C.geese.image, hedgehog: C.hedgehogs.image, squirrel: C.squirrel.image, swan: C.swans.image, carp: C.carp.image };
+  Promise.all(Object.entries(SOURCES).map(([key, src]) => loadImage(src).then(img => { IMG[key] = img; }))).then(() => {
     walkOverlay = buildWalkOverlay();
     shimmer = buildShimmer();
     buildLegend();
@@ -660,5 +829,5 @@
     requestAnimationFrame(t => { last = t; loop(t); });
   }).catch(err => { $("hint").textContent = err.message; });
 
-  window.__game = state;   // nur zum Testen in der Browser-Konsole
+  window.__game = Object.assign(state, { swans, carp });   // nur zum Testen in der Browser-Konsole
 })();

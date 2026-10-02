@@ -1,6 +1,6 @@
 // Alle veränderbaren Werte des Spiels. Die Spiellogik steht in game.js.
 const CONFIG = {
-  version: "6",                           // bei jeder neuen Version erhöhen (auch in index.html), dann lädt der Browser alles frisch
+  version: "9",                           // bei jeder neuen Version erhöhen (auch in index.html), dann lädt der Browser alles frisch
   view: { width: 640, height: 360 },      // sichtbarer Kartenausschnitt in Kartenpixeln
 
   round: {
@@ -16,7 +16,7 @@ const CONFIG = {
 
   player: {
     image: "assets/spieler.png",
-    start: { x: 690, y: 434 },            // Startposition (Füße) auf der Karte
+    start: { x: 1400, y: 612 },           // Startposition (Füße) auf der Karte: am Eingang rechts
     speed: 95,                            // Kartenpixel pro Sekunde
     stepsPerSecond: 8,                    // Tempo der Laufanimation
     frame: { width: 36, height: 54 },     // Größe eines Bildes im Sprite-Sheet
@@ -58,6 +58,18 @@ const CONFIG = {
     pickupRadius: 18,                     // so nah muss die Figur herankommen (Pixel)
   },
 
+  // Krone auf der Schlosstreppe: einmal pro Runde
+  crown: { x: 470, y: 690, points: 200, pickupRadius: 26, frame: 3, color: "#ffe680" },   // frame = Bild im Sprite-Sheet der Schätze
+
+  // Ränge am Ende der Runde: es gilt der höchste Rang, dessen Mindestpunktzahl erreicht ist
+  ranks: [
+    { min: 0,    title: "Parkbank-Genießer" },
+    { min: 500,  title: "Sonntagsspaziergänger" },
+    { min: 1000, title: "Kurgast mit Schwung" },
+    { min: 1500, title: "Walking-Profi" },
+    { min: 2000, title: "Kurpark-Legende" },
+  ],
+
   geese: {
     image: "assets/gans.png",
     frame: { width: 36, height: 36 },
@@ -74,7 +86,61 @@ const CONFIG = {
     energyLoss: 15,                       // Energieverlust pro Berührung
     protectTime: 1.5,                     // danach ist die Figur so lange geschützt und blinkt
     color: "#ffb37a",                     // Farbe der „-15“-Einblendung
+    cry: "GAK!", sound: "honk",
   },
+
+  // Igel: langsamer und kleiner als die Gänse, aber stachelig (gleiche Werte wie bei den Gänsen)
+  hedgehogs: {
+    image: "assets/igel.png",
+    frame: { width: 36, height: 24 },
+    anchor: { x: 18, y: 21 },
+    starts: [{ x: 560, y: 330 }, { x: 1190, y: 660 }, { x: 300, y: 560 }],
+    speed: 14,
+    walkTime: [1.5, 3.5],
+    pauseTime: [1, 3],
+    homeRadius: 90,
+    hitRadius: 13,
+    energyLoss: 10,
+    protectTime: 1.5,
+    color: "#ffb37a",
+    cry: "PIKS!", sound: "prick",
+  },
+
+  // Eichhörnchen: rennt zu einem herumliegenden Schatz, schnappt ihn und flitzt zurück
+  squirrel: {
+    image: "assets/eichhoernchen.png",
+    frame: { width: 40, height: 28 },
+    anchor: { x: 20, y: 25 },
+    interval: [9, 16],                    // Sekunden zwischen zwei Beutezügen (von, bis)
+    speed: 125,                           // schneller als die Spielfigur
+    range: [150, 230],                    // aus dieser Entfernung kommt es angerannt (Pixel)
+    catchRadius: 20,                      // so nah muss die Figur heran, um die Beute zurückzuholen
+    color: "#ffb37a",                     // Farbe der „GEKLAUT!“-Einblendung
+  },
+
+  // Schwäne: gleiten von Ziel zu Ziel über das Wasser
+  swans: {
+    image: "assets/schwan.png",
+    frame: { width: 40, height: 30 },
+    anchor: { x: 20, y: 25 },
+    starts: [{ x: 617, y: 583 }, { x: 288, y: 676 }, { x: 401, y: 874 }],
+    speed: 9,                             // Kartenpixel pro Sekunde
+    hop: [30, 110],                       // Strecke bis zum nächsten Ziel (von, bis)
+    pause: [1, 4],                        // Pause am Ziel in Sekunden
+  },
+
+  // Karpfen: springt ab und zu aus dem Schlossgraben
+  carp: {
+    image: "assets/karpfen.png",
+    frame: { width: 28, height: 16 },
+    interval: [4, 9],                     // Sekunden zwischen zwei Sprüngen
+    area: { x: 200, y: 470, width: 570, height: 450 },   // der Schlossgraben
+    height: 26, length: 32,               // Höhe und Weite des Sprungs (Pixel)
+    duration: 0.9,                        // Dauer des Sprungs in Sekunden
+  },
+
+  // Nebel am Kartenrand (die Stellen stehen in mapdata.js)
+  fog: { alpha: 0.5, drift: 14, speed: 0.5 },   // Deckkraft, Auslenkung in Pixeln, Tempo
 
   water: {
     mask: "assets/wasser.png",            // wo Wasser ist (aus der Karte abgeleitet)
@@ -109,6 +175,10 @@ const CONFIG = {
       drink:   [[260, 0.07, "sine", 520], [0, 0.03], [300, 0.07, "sine", 600]],                                                  // gluck, gluck
       ahh:     [[740, 0.38, "triangle", 370]],                                                                                   // zufriedenes „Ahh“
       tired:   [[311, 0.26, "sawtooth", 294], [294, 0.26, "sawtooth", 277], [277, 0.26, "sawtooth", 262], [262, 0.6, "sawtooth", 196]],   // traurige Posaune
+      crown:   [[523, 0.08, "square"], [659, 0.08, "square"], [784, 0.08, "square"], [1047, 0.1, "square"], [1319, 0.3, "square"]],   // Fanfare
+      prick:   [[1500, 0.05, "square", 900], [0, 0.03], [1300, 0.09, "square", 700]],
+      steal:   [[900, 0.06, "square", 1400], [1400, 0.06, "square", 900], [900, 0.1, "square", 1600]],                              // freches Kichern
+      splash:  [[520, 0.14, "sine", 170]],
       tick:    [[990, 0.06, "square"]],
       end:     [[784, 0.12, "square"], [659, 0.12, "square"], [523, 0.12, "square"], [392, 0.12, "square"], [523, 0.36, "square"]],
     },
