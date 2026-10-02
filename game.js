@@ -635,7 +635,7 @@
   }
   // Kleine Pfeile am Bildrand zeigen zu Schätzen, die außerhalb des Ausschnitts liegen
   function drawItemPointers() {
-    const cx = VW / 2, cy = VH / 2 + 10, rx = VW / 2 - 12, ry = VH / 2 - 26;       // oben bleibt Platz für die Anzeige
+    const cx = VW / 2, cy = VH / 2 + 2, rx = VW / 2 - 12, ry = VH / 2 - 36;        // oben bleibt Platz für die Anzeige, unten für die Hinweiszeile
     for (const it of state.items) {
       if (inView(it.x, it.y, 0)) continue;
       if (it.life - it.age < C.items.blinkTime && Math.floor(it.age * 8) % 2) continue;

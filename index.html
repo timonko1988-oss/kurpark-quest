@@ -17,7 +17,10 @@
 <meta property="og:locale" content="de_DE">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="assets/icon.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+<style>
+  @font-face { font-family: "Press Start 2P"; font-style: normal; font-weight: 400; font-display: swap;
+               src: url(assets/PressStart2P.woff2?v=11) format("woff2"); }
+</style>
 <style>
   /* Layout: ein Spielfeld mittig im Fenster; Anzeige, Start- und Endbildschirm liegen darüber, darunter eine Hinweiszeile.
      Bewusst nur ein Erscheinungsbild (Parkgrün bei Nacht). */
@@ -124,7 +127,7 @@
       <div class="card wide">
         <div class="hero">
           <div class="shot">
-            <img src="assets/startbild.jpg?v=10" width="768" height="768" alt="Kurpark-Quest: Ein Kurparkbesucher mit Walking-Stöcken läuft vor einer schnatternden Wildgans davon, im Hintergrund das Hotel mit dem roten Ankerkreuz, das Brunnenmädchen und Palmen">
+            <img src="assets/startbild.jpg?v=11" width="768" height="768" alt="Kurpark-Quest: Ein Kurparkbesucher mit Walking-Stöcken läuft vor einer schnatternden Wildgans davon, im Hintergrund das Hotel mit dem roten Ankerkreuz, das Brunnenmädchen und Palmen">
           </div>
           <p class="credit">Timon Kö Production</p>
         </div>
@@ -137,7 +140,7 @@
           <li class="only-touch"><kbd>Trinken</kbd> gedrückt halten: an der Trampelquelle trinken</li>
         </ul>
         <div id="legend" class="legend"></div>
-        <button id="play" type="button" style="background-image: url(assets/startknopf.png?v=10)" disabled>Spiel starten</button>
+        <button id="play" type="button" style="background-image: url(assets/startknopf.png?v=11)" disabled>Spiel starten</button>
         <p class="go only-keys">oder <kbd>Enter</kbd> drücken</p>
         </div>
       </div>
@@ -154,8 +157,8 @@
   </div>
   <p id="hint"><kbd>Pfeiltasten</kbd> laufen · <kbd>Leertaste</kbd> trinken · <kbd>M</kbd> Ton aus/an · <kbd>L</kbd> Laufflächen</p>
   <div id="rotate">Bitte Handy drehen</div>
-  <script src="config.js?v=10"></script>
-  <script src="mapdata.js?v=10"></script>
-  <script src="game.js?v=10"></script>
+  <script src="config.js?v=11"></script>
+  <script src="mapdata.js?v=11"></script>
+  <script src="game.js?v=11"></script>
 </body>
 </html>

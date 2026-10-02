@@ -1,6 +1,6 @@
 // Alle veränderbaren Werte des Spiels. Die Spiellogik steht in game.js.
 const CONFIG = {
-  version: "10",                           // bei jeder neuen Version erhöhen (auch in index.html), dann lädt der Browser alles frisch
+  version: "11",                           // bei jeder neuen Version erhöhen (auch in index.html), dann lädt der Browser alles frisch
   view: { width: 640, height: 360 },      // sichtbarer Kartenausschnitt in Kartenpixeln
 
   round: {
